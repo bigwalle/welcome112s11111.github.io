@@ -1,0 +1,745 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>jack&#39;s website</title>
+    <link>https://welcome112s.github.io/</link>
+    <description>Recent content on jack&#39;s website</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <copyright>jackyang</copyright>
+    <lastBuildDate>Mon, 12 Aug 2019 16:01:23 +0800</lastBuildDate>
+    
+        <atom:link href="https://welcome112s.github.io/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>golang核武器goroutine调度原理、channel详解</title>
+      <link>https://welcome112s.github.io/post/golang%E8%B0%83%E5%BA%A6%E5%8E%9F%E7%90%86/</link>
+      <pubDate>Mon, 12 Aug 2019 16:01:23 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/post/golang%E8%B0%83%E5%BA%A6%E5%8E%9F%E7%90%86/</guid>
+      
+        <description>
+
+&lt;h2 id=&#34;1-goroutine-简介&#34;&gt;1. goroutine 简介&lt;/h2&gt;
+
+&lt;p&gt;goroutine是go语言中最为NB的设计，也是其魅力所在，goroutine的本质是协程，是实现并行计算的核心。goroutine使用方式非常的简单，只需使用go关键字即可启动一个协程，并且它是处于异步方式运行，你不需要等它运行完成以后在执行以后的代码。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-$xslt&#34;&gt;go func()// 通过go 关键字启动一个协程来运行函数
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;2-goroutine-内部原理&#34;&gt;2. goroutine 内部原理&lt;/h2&gt;
+
+&lt;h3 id=&#34;概念介绍&#34;&gt;概念介绍&lt;/h3&gt;
+
+&lt;p&gt;在进行实现原理之前，了解一下一些关键性术语的概念。&lt;/p&gt;
+
+&lt;h4 id=&#34;并发&#34;&gt;并发&lt;/h4&gt;
+
+&lt;p&gt;一个cpu上能同时执行多项任务,在很短时间内，cpu来回切换执行任务（在某段很短时间内执行a,然后又迅速得切换b去执行）,有时间
+上的重叠（宏观上是同时的，微观仍是顺序执行）,这样开起来多个任务像是同时执行，这就是并发。&lt;/p&gt;
+
+&lt;h4 id=&#34;并行&#34;&gt;并行&lt;/h4&gt;
+
+&lt;p&gt;当系统有多个CPU时，每个CPU同一时刻都运行任务，互补抢占自己所在的CPU资源，同时进行，称为并行。&lt;/p&gt;
+
+&lt;h4 id=&#34;进程&#34;&gt;进程&lt;/h4&gt;
+
+&lt;p&gt;cpu在切换程序的时候，如果不保存上一个程序的状态（也就是我们常说的context&amp;ndash;上下文），直接切换下一个程序，就会丢失上一个程序的一系列状态，于是引入了进程这个概念，用以划分好程序运行时所需要的资源。因此进程就是一个程序运行时候的所需要的基本资源单位（也可以说是程序运行的一个实体）。&lt;/p&gt;
+
+&lt;h4 id=&#34;线程&#34;&gt;线程&lt;/h4&gt;
+
+&lt;p&gt;cpu切换多个进程的时候，会花费不少的时间，因为切换进程需要切换到内核态，而每次调度需要内核态都需要读取用户态的数据，进程一旦多起来，cpu调度会消耗一大堆资源，因此引入了线程的概念，线程本身几乎不占有资源，他们共享进程里的资源，内核调度起来不会那么像进程切换那么耗费资源。&lt;/p&gt;
+
+&lt;h4 id=&#34;协程&#34;&gt;协程&lt;/h4&gt;
+
+&lt;p&gt;协程拥有自己的寄存器上下文和栈。协程调度器切换时，将寄存器上下文和栈保存到其他地方，在切回来的时候，恢复先前保存的寄存器上线文和栈。
+因此，协程能保留上一次调用时的状态（即所有局部状态的一个特定组合），每次过程重入时，就相当于进入上一次调用的状态，换种说法：进入上一次离开时所处
+逻辑流的位置。线程和进程的操作是由程序触发系统接口，最好的执行者是系统；协程的操作执行者是用户自身程序，goroutine也是协程。&lt;/p&gt;
+
+&lt;h5 id=&#34;调度模型简介&#34;&gt;调度模型简介&lt;/h5&gt;
+
+&lt;p&gt;goroutine 能拥有强大的并发实现是通过GPM调度模型实现，下面就来解释下goroutine的调度模型。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;https://welcome112s.github.io/1075473-20180704144900055-654632620.jpg&#34; alt=&#34;&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Go的调度器内部有四个重要的结构：M，P，S，Sched，如上图所示（Sched未给出）&lt;/p&gt;
+
+&lt;p&gt;M:M代表内核级线程，一个M就是一个线程，goroutine就是跑在M之上的；M是一个很大的结构，里面维护小对象内存cache（mcache）、当前执行的goroutine、随机数发生器等等非常多的信息&lt;/p&gt;
+
+&lt;p&gt;G:代表一个goroutine，它有自己的栈，instruction pointer和其他信息（正在等待的channel等等），用于调度。&lt;/p&gt;
+
+&lt;p&gt;P:P全称是Processor，处理器，它的主要用途就是用来执行goroutine的，所以它也维护了一个goroutine队列，里面存储了所有需要它来执行的goroutine&lt;/p&gt;
+
+&lt;p&gt;Sched：代表调度器，它维护有存储M和G的队列以及调度器的一些状态信息等。&lt;/p&gt;
+
+&lt;h4 id=&#34;调度实现&#34;&gt;调度实现&lt;/h4&gt;
+
+&lt;p&gt;&lt;img src=&#34;https://welcome112s.github.io/1075473-20180704160300058-287296807.jpg&#34; alt=&#34;&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从上图中看，有2个物理线程M，每一个M都拥有一个处理器P，每一个也都有一个正在运行的goroutine。
+P的数量可以通过GOMAXPROCS()来设置，它其实也就代表了真正的并发度，即有多少个goroutine可以同时运行。
+图中灰色的那些goroutine并没有运行，而是出于ready的就绪态，正在等待被调度。P维护着这个队列（称之为runqueue），
+Go语言里，启动一个goroutine很容易：go function 就行，所以每有一个go语句被执行，runqueue队列就在其末尾加入一个
+goroutine，在下一个调度点，就从runqueue中取出（如何决定取哪个goroutine？）一个goroutine执行。&lt;/p&gt;
+
+&lt;p&gt;当一个OS线程M0陷入阻塞时（如下图)，P转而在运行M1，图中的M1可能是正被创建，或者从线程缓存中取出。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;https://welcome112s.github.io/1075473-20180704162532330-809705926.jpg&#34; alt=&#34;&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;当MO返回时，它必须尝试取得一个P来运行goroutine，一般情况下，它会从其他的OS线程那里拿一个P过来，
+如果没有拿到的话，它就把goroutine放在一个global runqueue里，然后自己睡眠（放入线程缓存里）。所有的P也会周期性的检查global runqueue并运行其中的goroutine，否则global runqueue上的goroutine永远无法执行。&lt;/p&gt;
+
+&lt;p&gt;另一种情况是P所分配的任务G很快就执行完了（分配不均），这就导致了这个处理器P很忙，但是其他的P还有任务，此时如果global runqueue没有任务G了，那么P不得不从其他的P里拿一些G来执行。一般来说，如果P从其他的P那里要拿任务的话，一般就拿run queue的一半，这就确保了每个OS线程都能充分的使用，如下图：&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;https://welcome112s.github.io/1075473-20180704164251684-1689850867.jpg&#34; alt=&#34;&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;参考地址：&lt;a href=&#34;http://morsmachine.dk/go-scheduler&#34;&gt;http://morsmachine.dk/go-scheduler&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&#34;3-使用goroutine&#34;&gt;3.使用goroutine&lt;/h2&gt;
+
+&lt;h3 id=&#34;基本使用&#34;&gt;基本使用&lt;/h3&gt;
+
+&lt;p&gt;设置goroutine运行的CPU数量，最新版本的go已经默认已经设置了。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-angular2&#34;&gt;num := runtime.NumCPU()    //获取主机的逻辑CPU个数
+runtime.GOMAXPROCS(num)    //设置可同时执行的最大CPU数
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;使用示例&#34;&gt;使用示例&lt;/h4&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;time&amp;quot;
+)
+
+func cal(a int , b int )  {
+    c := a+b
+    fmt.Printf(&amp;quot;%d + %d = %d\n&amp;quot;,a,b,c)
+}
+
+func main() {
+　　
+    for i :=0 ; i&amp;lt;10 ;i++{
+        go cal(i,i+1)  //启动10个goroutine 来计算
+    }
+    time.Sleep(time.Second * 2) // sleep作用是为了等待所有任务完成
+} 
+//结果
+//8 + 9 = 17
+//9 + 10 = 19
+//4 + 5 = 9
+//5 + 6 = 11
+//0 + 1 = 1
+//1 + 2 = 3
+//2 + 3 = 5
+//3 + 4 = 7
+//7 + 8 = 15
+//6 + 7 = 13
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;goroutine异常捕捉&#34;&gt;goroutine异常捕捉&lt;/h4&gt;
+
+&lt;p&gt;当启动多个goroutine时，如果其中一个goroutine异常了，并且我们并没有对进行异常处理，那么整个程序都会终止，所以我们在编写程序时候最好每个goroutine所运行的函数都做异常处理，异常处理采用recover&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;time&amp;quot;
+)
+
+func addele(a []int ,i int)  {
+    defer func() {    //匿名函数捕获错误
+        err := recover()
+        if err != nil {
+            fmt.Println(&amp;quot;add ele fail&amp;quot;)
+        }
+    }()
+   a[i]=i
+   fmt.Println(a)
+}
+
+func main() {
+    Arry := make([]int,4)
+    for i :=0 ; i&amp;lt;10 ;i++{
+        go addele(Arry,i)
+    }
+    time.Sleep(time.Second * 2)
+}
+//结果
+add ele fail
+[0 0 0 0]
+[0 1 0 0]
+[0 1 2 0]
+[0 1 2 3]
+add ele fail
+add ele fail
+add ele fail
+add ele fail
+add ele fail
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;同步的goroutine&#34;&gt;同步的goroutine&lt;/h3&gt;
+
+&lt;p&gt;由于goroutine是异步执行的，那很有可能出现主程序退出时还有goroutine没有执行完，此时goroutine也会跟着退出。此时如果想等到所有goroutine任务执行完毕才退出，go提供了sync包和channel来解决同步问题，当然如果你能预测每个goroutine执行的时间，你还可以通过time.Sleep方式等待所有的groutine执行完成以后在退出程序(如上面的列子)。&lt;/p&gt;
+
+&lt;p&gt;示例一：使用sync包同步goroutine
+sync大致实现方式
+WaitGroup 等待一组goroutinue执行完毕. 主程序调用 Add 添加等待的goroutinue数量. 每个goroutinue在执行结束时调用 Done ，此时等待队列数量减1.，主程序通过Wait阻塞，直到等待队列为0.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;sync&amp;quot;
+)
+
+func cal(a int , b int ,n *sync.WaitGroup)  {
+    c := a+b
+    fmt.Printf(&amp;quot;%d + %d = %d\n&amp;quot;,a,b,c)
+    defer n.Done() //goroutinue完成后, WaitGroup的计数-1
+
+}
+
+func main() {
+    var go_sync sync.WaitGroup //声明一个WaitGroup变量
+    for i :=0 ; i&amp;lt;10 ;i++{
+        go_sync.Add(1) // WaitGroup的计数加1
+        go cal(i,i+1,&amp;amp;go_sync)  
+    }
+    go_sync.Wait()  //等待所有goroutine执行完毕
+}
+//结果
+9 + 10 = 19
+2 + 3 = 5
+3 + 4 = 7
+4 + 5 = 9
+5 + 6 = 11
+1 + 2 = 3
+6 + 7 = 13
+7 + 8 = 15
+0 + 1 = 1
+8 + 9 = 17
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;示例二-通过channel实现goroutine之间的同步&#34;&gt;示例二：通过channel实现goroutine之间的同步。&lt;/h3&gt;
+
+&lt;p&gt;实现方式：通过channel能在多个groutine之间通讯，当一个goroutine完成时候向channel发送退出信号,等所有goroutine退出时候，利用for循环channe去取channel中的信号，若取不到数据会阻塞原理，等待所有goroutine执行完毕，使用该方法有个前提是你已经知道了你启动了多少个goroutine。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;time&amp;quot;
+)
+
+func cal(a int , b int ,Exitchan chan bool)  {
+    c := a+b
+    fmt.Printf(&amp;quot;%d + %d = %d\n&amp;quot;,a,b,c)
+    time.Sleep(time.Second*2)
+    Exitchan &amp;lt;- true
+}
+
+func main() {
+
+    Exitchan := make(chan bool,10)  //声明并分配管道内存
+    for i :=0 ; i&amp;lt;10 ;i++{
+        go cal(i,i+1,Exitchan)
+    }
+    for j :=0; j&amp;lt;10; j++{   
+         &amp;lt;- Exitchan  //取信号数据，如果取不到则会阻塞
+    }
+    close(Exitchan) // 关闭管道
+}
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;goroutine之间的通讯&#34;&gt;goroutine之间的通讯&lt;/h3&gt;
+
+&lt;p&gt;goroutine本质上是协程，可以理解为不受内核调度，而受go调度器管理的线程。goroutine之间可以通过channel进行通信或者说是数据共享，当然你也可以使用全局变量来进行数据共享。&lt;/p&gt;
+
+&lt;p&gt;示例：使用channel模拟消费者和生产者模式&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;sync&amp;quot;
+)
+
+func Productor(mychan chan int,data int,wait *sync.WaitGroup)  {
+    mychan &amp;lt;- data
+    fmt.Println(&amp;quot;product data：&amp;quot;,data)
+    wait.Done()
+}
+func Consumer(mychan chan int,wait *sync.WaitGroup)  {
+     a := &amp;lt;- mychan
+    fmt.Println(&amp;quot;consumer data：&amp;quot;,a)
+     wait.Done()
+}
+func main() {
+
+    datachan := make(chan int, 100)   //通讯数据管道
+    var wg sync.WaitGroup
+
+    for i := 0; i &amp;lt; 10; i++ {
+        go Productor(datachan, i,&amp;amp;wg) //生产数据
+        wg.Add(1)
+    }
+    for j := 0; j &amp;lt; 10; j++ {
+        go Consumer(datachan,&amp;amp;wg)  //消费数据
+        wg.Add(1)
+    }
+    wg.Wait()
+}
+//结果
+consumer data： 4
+product data： 5
+product data： 6
+product data： 7
+product data： 8
+product data： 9
+consumer data： 1
+consumer data： 5
+consumer data： 6
+consumer data： 7
+consumer data： 8
+consumer data： 9
+product data： 2
+consumer data： 2
+product data： 3
+consumer data： 3
+product data： 4
+consumer data： 0
+product data： 0
+product data： 1
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;channel&#34;&gt;channel&lt;/h2&gt;
+
+&lt;h4 id=&#34;简介&#34;&gt;简介&lt;/h4&gt;
+
+&lt;p&gt;channel俗称管道，用于数据传递或数据共享，其本质是一个先进先出的队列，使用goroutine+channel进行数据通讯简单高效，同时也线程安全，多个goroutine可同时修改一个channel，不需要加锁。&lt;/p&gt;
+
+&lt;p&gt;channel可分为三种类型：&lt;/p&gt;
+
+&lt;p&gt;只读channel：只能读channel里面数据，不可写入&lt;/p&gt;
+
+&lt;p&gt;只写channel：只能写数据，不可读&lt;/p&gt;
+
+&lt;p&gt;一般channel：可读可写&lt;/p&gt;
+
+&lt;h3 id=&#34;channel使用&#34;&gt;channel使用&lt;/h3&gt;
+
+&lt;p&gt;定义和声明&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;var readOnlyChan &amp;lt;-chan int            // 只读chan
+var writeOnlyChan chan&amp;lt;- int           // 只写chan
+var mychan  chan int                     //读写channel
+//定义完成以后需要make来分配内存空间，不然使用会deadlock
+mychannel = make(chan int,10)
+
+//或者
+read_only := make (&amp;lt;-chan int,10)//定义只读的channel
+write_only := make (chan&amp;lt;- int,10)//定义只写的channel
+read_write := make (chan int,10)//可同时读写
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;读写数据&lt;/p&gt;
+
+&lt;p&gt;需要注意的是：&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;管道如果未关闭，在读取超时会则会引发deadlock异常&lt;/li&gt;
+&lt;li&gt;管道如果关闭进行写入数据会pannic&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;当管道中没有数据时候再行读取或读取到默认值，如int类型默认值是0&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;ch &amp;lt;- &amp;quot;wd&amp;quot;  //写数据
+a := &amp;lt;- ch //读取数据
+a, ok := &amp;lt;-ch  //优雅的读取数据
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;循环管道&lt;/p&gt;
+
+&lt;p&gt;需要注意的是：&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;使用range循环管道，如果管道未关闭会引发deadlock错误。&lt;/li&gt;
+&lt;li&gt;如果采用for死循环已经关闭的管道，当管道没有数据时候，读取的数据会是管道的默认值，并且循环不会退出。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+&amp;quot;fmt&amp;quot;
+&amp;quot;time&amp;quot;
+)
+
+
+func main() {
+mychannel := make(chan int,10)
+for i := 0;i &amp;lt; 10;i++{
+    mychannel &amp;lt;- i
+}
+close(mychannel)  //关闭管道
+fmt.Println(&amp;quot;data lenght: &amp;quot;,len(mychannel))
+for  v := range mychannel {  //循环管道
+    fmt.Println(v)
+}
+fmt.Printf(&amp;quot;data lenght:  %d&amp;quot;,len(mychannel))
+}
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&#34;带缓冲区channe和不带缓冲区channel&#34;&gt;带缓冲区channe和不带缓冲区channel&lt;/h4&gt;
+
+&lt;p&gt;带缓冲区channel：定义声明时候制定了缓冲区大小(长度)，可以保存多个数据。&lt;/p&gt;
+
+&lt;p&gt;不带缓冲区channel：只能存一个数据，并且只有当该数据被取出时候才能存下一个数据。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;ch := make(chan int) //不带缓冲区
+ch := make(chan int ,10) //带缓冲区
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;不带缓冲区示例：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import &amp;quot;fmt&amp;quot;
+
+func test(c chan int) {
+    for i := 0; i &amp;lt; 10; i++ {
+        fmt.Println(&amp;quot;send &amp;quot;, i)
+        c &amp;lt;- i
+    }
+}
+func main() {
+    ch := make(chan int)
+    go test(ch)
+    for j := 0; j &amp;lt; 10; j++ {
+        fmt.Println(&amp;quot;get &amp;quot;, &amp;lt;-ch)
+    }
+}
+
+
+//结果：
+send  0
+send  1
+get  0
+get  1
+send  2
+send  3
+get  2
+get  3
+send  4
+send  5
+get  4
+get  5
+send  6
+send  7
+get  6
+get  7
+send  8
+send  9
+get  8
+get  9
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;channel实现作业池&#34;&gt;channel实现作业池&lt;/h4&gt;
+
+&lt;p&gt;我们创建三个channel，一个channel用于接受任务，一个channel用于保持结果，还有个channel用于决定程序退出的时候。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+)
+
+func Task(taskch, resch chan int, exitch chan bool) {
+    defer func() {   //异常处理
+        err := recover()
+        if err != nil {
+            fmt.Println(&amp;quot;do task error：&amp;quot;, err)
+            return
+        }
+    }()
+
+    for t := range taskch { //  处理任务
+        fmt.Println(&amp;quot;do task :&amp;quot;, t)
+        resch &amp;lt;- t //
+    }
+    exitch &amp;lt;- true //处理完发送退出信号
+}
+
+func main() {
+    taskch := make(chan int, 20) //任务管道
+    resch := make(chan int, 20)  //结果管道
+    exitch := make(chan bool, 5) //退出管道
+    go func() {
+        for i := 0; i &amp;lt; 10; i++ {
+            taskch &amp;lt;- i
+        }
+        close(taskch)
+    }()
+
+
+    for i := 0; i &amp;lt; 5; i++ {  //启动5个goroutine做任务
+        go Task(taskch, resch, exitch)
+    }
+
+    go func() { //等5个goroutine结束
+        for i := 0; i &amp;lt; 5; i++ {
+            &amp;lt;-exitch
+        }
+        close(resch)  //任务处理完成关闭结果管道，不然range报错
+        close(exitch)  //关闭退出管道
+    }()
+
+    for res := range resch{  //打印结果
+        fmt.Println(&amp;quot;task res：&amp;quot;,res)
+    }
+}
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;只读channel和只写channel&#34;&gt;只读channel和只写channel&lt;/h4&gt;
+
+&lt;p&gt;一般定义只读和只写的管道意义不大，更多时候我们可以在参数传递时候指明管道可读还是可写，即使当前管道是可读写的。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;time&amp;quot;
+)
+
+//只能向chan里写数据
+func send(c chan&amp;lt;- int) {
+    for i := 0; i &amp;lt; 10; i++ {
+        c &amp;lt;- i
+    }
+}
+//只能取channel中的数据
+func get(c &amp;lt;-chan int) {
+    for i := range c {
+        fmt.Println(i)
+    }
+}
+func main() {
+    c := make(chan int)
+    go send(c)
+    go get(c)
+    time.Sleep(time.Second*1)
+}
+//结果
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;select-case实现非阻塞channel&#34;&gt;select-case实现非阻塞channel&lt;/h4&gt;
+
+&lt;p&gt;原理通过select+case加入一组管道，当满足（这里说的满足意思是有数据可读或者可写)select中的某个case时候，那么该case返回，若都不满足case，则走default分支。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;fmt&amp;quot;
+)
+
+func send(c chan int)  {
+    for i :=1 ; i&amp;lt;10 ;i++  {
+     c &amp;lt;-i
+     fmt.Println(&amp;quot;send data : &amp;quot;,i)
+    }
+}
+
+func main() {
+    resch := make(chan int,20)
+    strch := make(chan string,10)
+    go send(resch)
+    strch &amp;lt;- &amp;quot;wd&amp;quot;
+    select {
+    case a := &amp;lt;-resch:
+        fmt.Println(&amp;quot;get data : &amp;quot;, a)
+    case b := &amp;lt;-strch:
+        fmt.Println(&amp;quot;get data : &amp;quot;, b)
+    default:
+        fmt.Println(&amp;quot;no channel actvie&amp;quot;)
+
+    }
+
+}
+
+//结果：get data :  wd
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;channel频率控制&#34;&gt;channel频率控制&lt;/h4&gt;
+
+&lt;p&gt;在对channel进行读写的时，go还提供了非常人性化的操作，那就是对读写的频率控制，通过time.Ticke实现&lt;/p&gt;
+
+&lt;p&gt;示例：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-javascript&#34;&gt;package main
+
+import (
+    &amp;quot;time&amp;quot;
+    &amp;quot;fmt&amp;quot;
+)
+
+func main(){
+    requests:= make(chan int ,5)
+    for i:=1;i&amp;lt;5;i++{
+        requests&amp;lt;-i
+    }
+    close(requests)
+    limiter := time.Tick(time.Second*1)
+    for req:=range requests{
+        &amp;lt;-limiter
+        fmt.Println(&amp;quot;requets&amp;quot;,req,time.Now()) //执行到这里，需要隔1秒才继续往下执行，time.Tick(timer)上面已定义
+    }
+}
+//结果：
+requets 1 2018-07-06 10:17:35.98056403 +0800 CST m=+1.004248763
+requets 2 2018-07-06 10:17:36.978123472 +0800 CST m=+2.001798205
+requets 3 2018-07-06 10:17:37.980869517 +0800 CST m=+3.004544250
+requets 4 2018-07-06 10:17:38.976868836 +0800 CST m=+4.000533569
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+      
+    </item>
+    
+    <item>
+      <title>杂谈</title>
+      <link>https://welcome112s.github.io/post/%E6%9D%82%E8%B0%88/</link>
+      <pubDate>Wed, 31 Jul 2019 16:01:23 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/post/%E6%9D%82%E8%B0%88/</guid>
+      
+        <description>
+
+&lt;h2 id=&#34;聊聊我吧&#34;&gt;聊聊我吧&lt;/h2&gt;
+
+&lt;ul&gt;
+&lt;li&gt;今天我们部门陆续有人辞职，怎么说吧，互联网基本上待上两三年都会走人的，除非这个团队很好，
+有更大的发展，有更大的职位空间；&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&#34;技术目标&#34;&gt;技术目标&lt;/h4&gt;
+
+&lt;ul&gt;
+&lt;li&gt;linux&lt;/li&gt;
+&lt;li&gt;golang&lt;/li&gt;
+&lt;li&gt;docker&lt;/li&gt;
+&lt;li&gt;kafka&lt;/li&gt;
+&lt;li&gt;rocketmq&lt;/li&gt;
+&lt;li&gt;mongodb&lt;/li&gt;
+&lt;li&gt;dubbo&lt;/li&gt;
+&lt;li&gt;Kubernetes(k8s)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&#34;技术栈熟悉&#34;&gt;技术栈熟悉&lt;/h3&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;熟悉基本概念并熟练掌握&lt;/p&gt;
+&lt;/blockquote&gt;
+</description>
+      
+    </item>
+    
+    <item>
+      <title>docker的基本架构</title>
+      <link>https://welcome112s.github.io/post/docker/</link>
+      <pubDate>Sat, 06 Jul 2019 16:01:23 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/post/docker/</guid>
+      
+        <description>
+
+&lt;blockquote&gt;
+&lt;p&gt;docker 基础&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;docker 的基本功能使用,以及原理&lt;/p&gt;
+
+&lt;h2 id=&#34;目录&#34;&gt;目录&lt;/h2&gt;
+
+&lt;ul&gt;
+&lt;li&gt;docker client&lt;/li&gt;
+&lt;li&gt;docker damegn&lt;br /&gt;&lt;/li&gt;
+&lt;li&gt;docker graphe&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+      
+    </item>
+    
+    <item>
+      <title>关于</title>
+      <link>https://welcome112s.github.io/about/</link>
+      <pubDate>Sat, 20 Jul 2019 21:38:52 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/about/</guid>
+      
+        <description>
+
+&lt;h3 id=&#34;个人介绍&#34;&gt;个人介绍&lt;/h3&gt;
+
+&lt;ul&gt;
+&lt;li&gt;混迹在互联网的80后大叔&lt;/li&gt;
+&lt;li&gt;擅长 android / react  /weex /vue / golang /java /c、c++&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&#34;工作经历&#34;&gt;工作经历&lt;/h3&gt;
+
+&lt;ul&gt;
+&lt;li&gt;2011~至今&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&#34;工作经验&#34;&gt;工作经验&lt;/h3&gt;
+
+&lt;ul&gt;
+&lt;li&gt;保密&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&#34;个人爱好&#34;&gt;个人爱好&lt;/h3&gt;
+
+&lt;ul&gt;
+&lt;li&gt;足球&lt;/li&gt;
+&lt;li&gt;游戏&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&#34;从事行业&#34;&gt;从事行业&lt;/h3&gt;
+
+&lt;ul&gt;
+&lt;li&gt;车联网&lt;/li&gt;
+&lt;li&gt;保险&lt;/li&gt;
+&lt;li&gt;旅游&lt;/li&gt;
+&lt;li&gt;物联网&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&#34;联系方式&#34;&gt;联系方式&lt;/h3&gt;
+
+&lt;ul&gt;
+&lt;li&gt;wechat:JackYang95&lt;/li&gt;
+&lt;li&gt;qq    :292545811(不常用)&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+      
+    </item>
+    
+  </channel>
+</rss>

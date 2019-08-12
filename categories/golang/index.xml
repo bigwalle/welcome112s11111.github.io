@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>golang on jack&#39;s website</title>
+    <link>https://welcome112s.github.io/categories/golang/</link>
+    <description>Recent content in golang on jack&#39;s website</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <copyright>jackyang</copyright>
+    <lastBuildDate>Mon, 12 Aug 2019 16:01:23 +0800</lastBuildDate>
+    
+	<atom:link href="https://welcome112s.github.io/categories/golang/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>golang核武器goroutine调度原理、channel详解</title>
+      <link>https://welcome112s.github.io/post/golang%E8%B0%83%E5%BA%A6%E5%8E%9F%E7%90%86/</link>
+      <pubDate>Mon, 12 Aug 2019 16:01:23 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/post/golang%E8%B0%83%E5%BA%A6%E5%8E%9F%E7%90%86/</guid>
+      <description>1. goroutine 简介 goroutine是go语言中最为NB的设计，也是其魅力所在，goroutine的本质是协程，是实现并行计算的核心。goroutin</description>
+    </item>
+    
+  </channel>
+</rss>

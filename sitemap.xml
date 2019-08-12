@@ -1,0 +1,104 @@
+<?xml-stylesheet type="text/xsl" href="https://welcome112s.github.io/sitemap.xsl"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  
+  <url>
+    <loc>https://welcome112s.github.io/post/golang%E8%B0%83%E5%BA%A6%E5%8E%9F%E7%90%86/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/post/%E6%9D%82%E8%B0%88/</loc>
+    <lastmod>2019-07-31T16:01:23+08:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/post/docker/</loc>
+    <lastmod>2019-07-07T16:01:23+08:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/about/</loc>
+    <lastmod>2019-07-28T21:41:52+08:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/categories/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/post/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/tags/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/tags/go/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/categories/golang/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/tags/golang/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/</loc>
+    <lastmod>2019-08-12T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/tags/%E6%9D%82%E8%B0%88/</loc>
+    <lastmod>2019-07-31T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/categories/%E7%94%9F%E6%B4%BB/</loc>
+    <lastmod>2019-07-31T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/tags/%E7%94%9F%E6%B4%BB/</loc>
+    <lastmod>2019-07-31T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/categories/docker/</loc>
+    <lastmod>2019-07-07T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://welcome112s.github.io/tags/docker/</loc>
+    <lastmod>2019-07-07T16:01:23+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+</urlset>

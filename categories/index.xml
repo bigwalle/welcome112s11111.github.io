@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Categories on jack&#39;s website</title>
+    <link>https://welcome112s.github.io/categories/</link>
+    <description>Recent content in Categories on jack&#39;s website</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <copyright>jackyang</copyright>
+    <lastBuildDate>Mon, 12 Aug 2019 16:01:23 +0800</lastBuildDate>
+    
+	<atom:link href="https://welcome112s.github.io/categories/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>golang</title>
+      <link>https://welcome112s.github.io/categories/golang/</link>
+      <pubDate>Mon, 12 Aug 2019 16:01:23 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/categories/golang/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>生活</title>
+      <link>https://welcome112s.github.io/categories/%E7%94%9F%E6%B4%BB/</link>
+      <pubDate>Wed, 31 Jul 2019 16:01:23 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/categories/%E7%94%9F%E6%B4%BB/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>docker</title>
+      <link>https://welcome112s.github.io/categories/docker/</link>
+      <pubDate>Sat, 06 Jul 2019 16:01:23 +0800</pubDate>
+      
+      <guid>https://welcome112s.github.io/categories/docker/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

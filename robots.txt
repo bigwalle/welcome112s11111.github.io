@@ -1,0 +1,2 @@
+User-agent: *
+Sitemap: https://welcome112s.github.io/sitemap.xml
